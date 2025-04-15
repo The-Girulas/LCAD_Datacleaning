@@ -4,7 +4,6 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use encoding_rs::*;
-use csv::{ReaderBuilder, WriterBuilder};
 
 /// Corrige un CSV en filtrant ou marquant les lignes incohérentes (nombre de champs inattendu).
 #[derive(Parser, Debug)]
@@ -15,23 +14,23 @@ struct Args {
     file: PathBuf,
 
     /// Encodage du fichier (utf-8, windows-1252, iso-8859-1, etc.)
-    #[arg(short, long, default_value = "utf-8")]
+    #[arg(short = 'e', long, default_value = "utf-8")]
     encoding: String,
 
     /// Séparateur de champ (ex: ',' ou ';' ou '\\t')
-    #[arg(short, long, default_value = ",")]
+    #[arg(short = 'd', long, default_value = ",")]
     delimiter: String,
 
     /// Nombre de champs attendu (ex: 24)
-    #[arg(short, long)]
+    #[arg(short = 'n', long)]
     expected_fields: usize,
 
     /// Fichier de sortie corrigé
-    #[arg(short, long, default_value = "corrected.csv")]
+    #[arg(short = 'o', long, default_value = "corrected.csv")]
     output: PathBuf,
 
     /// Nombre maximum de lignes à lire (optionnel)
-    #[arg(short, long)]
+    #[arg(short = 'm', long)]
     max: Option<usize>,
 }
 
@@ -39,7 +38,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let file = File::open(&args.file)?;
-    let mut reader = BufReader::new(file);
+    let reader = BufReader::new(file);
 
     let encoding = match args.encoding.to_lowercase().as_str() {
         "utf-8" => UTF_8,
@@ -61,38 +60,52 @@ fn main() -> anyhow::Result<()> {
         args.delimiter.as_bytes()[0]
     };
 
-    let mut csv_reader = ReaderBuilder::new()
-        .delimiter(delimiter_byte)
-        .has_headers(false)
-        .from_reader(transcoded);
-
     let out_file = File::create(&args.output)?;
-    let mut writer = WriterBuilder::new()
-        .delimiter(delimiter_byte)
-        .from_writer(BufWriter::new(out_file));
+    let mut writer = BufWriter::new(out_file);
 
     let mut count = 0usize;
     let mut ok = 0usize;
     let mut bad = 0usize;
 
-    for result in csv_reader.records() {
-        let record = result?;
+    use std::io::BufRead;
+    let reader = BufReader::new(transcoded);
+
+    for line_result in reader.lines() {
+        let line = line_result?;
+        let mut in_quotes = false;
+        let mut fields = Vec::new();
+        let mut current = String::new();
+
+        for c in line.chars() {
+            if c == '"' {
+                in_quotes = !in_quotes;
+                current.push(c);
+            } else if c == (delimiter_byte as char) && !in_quotes {
+                fields.push(current.trim_matches('"').to_string());
+                current.clear();
+            } else {
+                current.push(c);
+            }
+        }
+        fields.push(current.trim_matches('"').to_string());
+
         count += 1;
 
-        if record.len() == args.expected_fields {
-            writer.write_record(&record)?;
+        let line_to_write = if fields.len() == args.expected_fields {
             ok += 1;
+            fields.join(&(args.delimiter.clone()))
         } else {
-            // Option simple : ignorer ou marquer la ligne
-            // Ici, on écrit une ligne commentée commençant par "#BAD"
-            let mut line = vec![format!("#BAD ({} champs)", record.len())];
-            line.extend(record.iter().map(|s| s.to_string()));
-            writer.write_record(&line)?;
             bad += 1;
-        }
+            let mut bad_line = vec![format!("#BAD ({} champs)", fields.len())];
+            bad_line.extend(fields);
+            bad_line.join(&(args.delimiter.clone()))
+        };
+
+        writeln!(writer, "{line_to_write}")?;
 
         if count % 100_000 == 0 {
-            println!("Lignes traitées : {count}");
+            print!("\rLignes traitées : {count}");
+            std::io::stdout().flush().unwrap();
         }
 
         if let Some(max_lines) = args.max {

@@ -1,10 +1,9 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 
 use clap::Parser;
 use encoding_rs::*;
-use csv::WriterBuilder;
 
 /// Correction automatique d'un CSV corrompu : fusionne les champs éclatés, marque les lignes irrécupérables.
 #[derive(Parser, Debug)]
@@ -15,23 +14,23 @@ struct Args {
     file: PathBuf,
 
     /// Encodage du fichier (utf-8, windows-1252, iso-8859-1, etc.)
-    #[arg(short, long, default_value = "utf-8")]
+    #[arg(short = 'e', long, default_value = "utf-8")]
     encoding: String,
 
     /// Séparateur de champ (ex: ',' ou ';' ou '\\t')
-    #[arg(short, long, default_value = ",")]
+    #[arg(short = 'd', long, default_value = ",")]
     delimiter: String,
 
     /// Nombre de champs attendu
-    #[arg(short, long)]
+    #[arg(short = 'n', long)]
     expected_fields: usize,
 
     /// Fichier de sortie corrigé
-    #[arg(short, long, default_value = "corrected_auto.csv")]
+    #[arg(short = 'o', long, default_value = "corrected_auto.csv")]
     output: PathBuf,
 
     /// Nombre maximum de lignes à lire (optionnel)
-    #[arg(short, long)]
+    #[arg(short = 'm', long)]
     max: Option<usize>,
 }
 
@@ -64,9 +63,7 @@ fn main() -> anyhow::Result<()> {
     };
 
     let out_file = File::create(&args.output)?;
-    let mut writer = WriterBuilder::new()
-        .delimiter(delimiter as u8)
-        .from_writer(BufWriter::new(out_file));
+    let mut writer = BufWriter::new(out_file);
 
     let mut count = 0usize;
     let mut ok = 0usize;
@@ -92,28 +89,31 @@ fn main() -> anyhow::Result<()> {
         }
         fields.push(current.trim_matches('"').to_string());
 
-        if fields.len() == args.expected_fields {
-            writer.write_record(&fields)?;
+        let line_to_write = if fields.len() == args.expected_fields {
             ok += 1;
+            fields.join(&args.delimiter)
         } else if fields.len() > args.expected_fields {
             // Tenter de fusionner les champs en trop dans le dernier champ valide
+            fixed += 1;
             let mut fixed_fields = Vec::new();
             fixed_fields.extend(fields[..args.expected_fields - 1].iter().cloned());
             let merged: String = fields[args.expected_fields - 1..].join(&args.delimiter);
             fixed_fields.push(merged);
-            writer.write_record(&fixed_fields)?;
-            fixed += 1;
+            fixed_fields.join(&args.delimiter)
         } else {
             // Ligne irrécupérable : marquer
+            bad += 1;
             let mut bad_fields = vec![format!("#BAD ({} champs)", fields.len())];
             bad_fields.extend(fields);
-            writer.write_record(&bad_fields)?;
-            bad += 1;
-        }
+            bad_fields.join(&args.delimiter)
+        };
+
+        writeln!(writer, "{line_to_write}")?;
 
         count += 1;
         if count % 100_000 == 0 {
-            println!("Lignes traitées : {count}");
+            print!("\rLignes traitées : {count}");
+            std::io::stdout().flush().unwrap();
         }
 
         if let Some(max_lines) = args.max {

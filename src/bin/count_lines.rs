@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Write};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -31,7 +31,7 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let file = File::open(&args.file)?;
-    let mut reader = BufReader::new(file);
+    let reader = BufReader::new(file);
 
     let encoding = match args.encoding.to_lowercase().as_str() {
         "utf-8" => UTF_8,
@@ -66,7 +66,8 @@ fn main() -> anyhow::Result<()> {
         count += 1;
 
         if count % 100_000 == 0 {
-            println!("Lignes lues : {count}");
+            print!("\rLignes lues : {count}");
+            std::io::stdout().flush().unwrap();
         }
 
         if let Some(max_lines) = args.max {

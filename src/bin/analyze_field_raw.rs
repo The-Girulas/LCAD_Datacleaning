@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -86,7 +86,8 @@ fn main() -> anyhow::Result<()> {
 
         count += 1;
         if count % 100_000 == 0 {
-            println!("Lignes lues : {count}");
+            print!("\rLignes lues : {count}");
+            std::io::stdout().flush().unwrap();
         }
 
         if let Some(max_lines) = args.max {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 
 use clap::Parser;
@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
     let decimal_sep = args.decimal.as_ref().and_then(|s| s.chars().next());
 
     /// Vérifie si le caractère à l'index `i` dans `line` est un séparateur décimal entouré de chiffres
-    fn is_decimal_separator(line: &str, i: usize, decimal_sep: char) -> bool {
+    fn is_decimal_separator(line: &str, i: usize, _decimal_sep: char) -> bool {
         let chars: Vec<char> = line.chars().collect();
         if i == 0 || i + 1 >= chars.len() {
             return false;
@@ -134,7 +134,8 @@ fn main() -> anyhow::Result<()> {
 
         count += 1;
         if count % 100_000 == 0 {
-            println!("Lignes lues : {count}");
+            print!("\rLignes lues : {count}");
+            std::io::stdout().flush().unwrap();
         }
 
         if let Some(max_lines) = args.max {
