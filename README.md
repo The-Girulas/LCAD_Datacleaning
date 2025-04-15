@@ -158,9 +158,6 @@ cargo run --bin hyper_csv_analyze -- --file ../Evenements_anon.csv --delimiter '
 - [ ] Ajouter une option `--min-count N` pour n’afficher que les valeurs apparaissant au moins N fois
 - [ ] Ajouter des tests unitaires sur des cas limites
 
-
-RAJOUTER HYPER COMMANDE QUI FAIT TOUT EN PARALELLE
-
 ## Licence
 
 Projet pédagogique – Université 2024
