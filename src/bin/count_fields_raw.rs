@@ -109,20 +109,17 @@ fn main() -> anyhow::Result<()> {
         let mut in_quotes = false;
         let mut field_count = 1; // au moins un champ
 
-        let chars: Vec<char> = line.chars().collect();
-        let len = chars.len();
+        let bytes = line.as_bytes();
         let mut idx = 0;
-        while idx < len {
-            let c = chars[idx];
-            if c == '"' {
+        while idx < bytes.len() {
+            let c = bytes[idx];
+            if c == b'"' {
                 in_quotes = !in_quotes;
-            } else if c == delimiter && !in_quotes {
+            } else if c == delimiter as u8 && !in_quotes {
+                // (optionnel) gestion du séparateur décimal ambigu
                 if let Some(decimal_c) = decimal_sep {
-                    if decimal_c == delimiter {
-                        if is_decimal_separator(&line, idx, decimal_c) {
-                            idx += 1;
-                            continue; // ignorer ce séparateur ambigu
-                        }
+                    if decimal_c as u8 == delimiter as u8 {
+                        // On ne gère pas ici l'ambiguïté décimale pour l'optimisation, à réintégrer si besoin
                     }
                 }
                 field_count += 1;

@@ -58,7 +58,7 @@ Chaque outil est un binaire indépendant, à lancer avec `cargo run --bin <nom> 
   ```
 
 ### 3bis. `count_fields_raw`
-- **But** : Analyser la distribution du nombre de champs par ligne (analyse brute, sans parser strict)
+- **But** : Analyser la distribution du nombre de champs par ligne (analyse brute, sans parser strict) donne les meilleurs résultats (peut être TRES TRES long)
 - **Options** :
   - `--file <chemin>`
   - `--encoding <encodage>`
@@ -123,39 +123,41 @@ Chaque outil est un binaire indépendant, à lancer avec `cargo run --bin <nom> 
   cargo run --bin repair_csv_auto -- --file ../Evenements_anon.csv --delimiter ',' --output ../Evenements_anon_corrected_auto.csv --expected-fields 93 --max 100000
   ```
 
+## 6. `hyper_csv_analyze`
+- **But** : Effectuer en un seul passage sur le fichier CSV : extraction d’entête, comptage de lignes, distribution du nombre de champs, analyse de plusieurs champs, et réparation automatique.
+- **Fonctionnement** :
+  - Lit le fichier ligne par ligne (streaming, très efficace).
+  - À chaque ligne : met à jour le compteur de lignes, la distribution du nombre de champs, la distribution des valeurs pour chaque champ à analyser, et écrit la version réparée de la ligne dans un fichier de sortie.
+  - Écrit l’entête dans `ListeVariablesContrats.txt` à la première ligne.
+  - Permet d’obtenir tous les résultats d’analyse et un CSV corrigé en une seule lecture du fichier.
+- **À utiliser** : pour gagner du temps sur les très gros fichiers, éviter de relire plusieurs fois, et obtenir toutes les analyses et corrections en une seule commande.
+- **Exemple** :
+  ```sh
+  cargo run --bin hyper_csv_analyze -- --file ../Evenements_anon.csv --delimiter ',' --expected-fields 93 --analyze-fields 2,5 --output ../Evenements_anon_hyper_corrected.csv --max 100000
+  ```
+  (Ici, on analyse les distributions du champ 2 et du champ 5, en plus de toutes les autres analyses.)
+
 ## Exemples d’utilisation
 
 ```sh
-cargo run --bin extract_header -- --file Evenements_anon.csv --delimiter ','
-cargo run --bin count_lines -- --file Evenements_anon.csv --max 10000 --delimiter ','
-cargo run --bin count_fields -- --file Evenements_anon.csv --delimiter ',' --max 100000
-cargo run --bin analyze_field -- --file Evenements_anon.csv --field-name "TYPE_EVENEMENT" --max 50000 --delimiter ','
+cargo run --bin extract_header -- --file ../Evenements_anon.csv --delimiter ','
+cargo run --bin count_lines -- --file ../Evenements_anon.csv --max 10000 --delimiter ','
+cargo run --bin count_fields -- --file ../Evenements_anon.csv --delimiter ',' --max 100000
+cargo run --bin analyze_field -- --file ../Evenements_anon.csv --field-name "TYPE_EVENEMENT" --max 50000 --delimiter ','
+cargo run --bin hyper_csv_analyze -- --file ../Evenements_anon.csv --delimiter ',' --expected-fields 93 --analyze-fields 2,5 --output ../Evenements_anon_hyper_corrected.csv --max 100000
 ```
 
 ## Conseils pour éviter les crashs
 
 - Utiliser l’option `--max` pour limiter le nombre de lignes traitées lors des premiers tests
-- Rediriger la sortie vers un fichier si besoin :  
-  `cargo run --bin count_fields -- --file ... > resultat.txt`
-- (Amélioration prévue) : options pour limiter la sortie console
-
-## Limitations connues
-
-- Les outils `count_fields`, `count_fields_raw`, `analyze_field`, etc. peuvent produire une sortie très volumineuse si le fichier est très hétérogène ou si le champ analysé a beaucoup de valeurs distinctes.
-- Cela peut saturer le terminal et provoquer un crash ou un gel de l’interface.
 
 ## Axes d’amélioration (TODO)
 
 - [ ] Ajouter une option `--top N` pour n’afficher que les N valeurs les plus fréquentes (pour les distributions et les valeurs de champ)
 - [ ] Ajouter une option `--output fichier.txt` pour écrire la distribution dans un fichier
 - [ ] Ajouter une option `--min-count N` pour n’afficher que les valeurs apparaissant au moins N fois
-- [ ] Ajouter une option `--quiet` ou `--summary` pour n’afficher qu’un résumé
 - [ ] Ajouter des tests unitaires sur des cas limites
 
-## Dépannage
-
-- Si vous obtenez une erreur d’encodage, essayez l’option `--encoding windows-1252` ou `--encoding utf-8` selon le fichier.
-- Si le programme semble “planter”, réduisez la valeur de `--max` ou redirigez la sortie vers un fichier.
 
 RAJOUTER HYPER COMMANDE QUI FAIT TOUT EN PARALELLE
 
