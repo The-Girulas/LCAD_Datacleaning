@@ -110,17 +110,29 @@ Chaque outil est un binaire indépendant, à lancer avec `cargo run --bin <nom> 
   ```
 
 ### 5bis. `repair_csv_auto`
-- **But** : Correction automatique de la structure du CSV en tentant de fusionner les champs éclatés.
+- **But** : Correction automatique de la structure du CSV, en tentant de fusionner intelligemment les champs éclatés en se basant sur l'inférence de type des colonnes.
 - **Fonctionnement** :
-  - Lit le fichier ligne par ligne (mode tolérant).
-  - Les lignes avec le bon nombre de champs sont recopiées telles quelles.
-  - Les lignes avec trop de champs sont “réparées” automatiquement : les champs en trop sont fusionnés dans le dernier champ attendu.
-  - Les lignes avec trop peu de champs sont marquées comme irrécupérables (`#BAD (N champs)`).
-  - Produit un CSV utilisable directement pour la plupart des traitements automatiques.
+  - Lit le fichier ligne par ligne en utilisant un parseur CSV robuste.
+  - **Inférence de Type (Optionnel)**: Si activé (`--inference-lines > 0`), le programme lit d'abord un échantillon de lignes ayant le nombre de champs attendu pour inférer le type de chaque colonne (Numérique ou Texte). Le séparateur décimal utilisé pour cette inférence peut être spécifié (ex: `--decimal-separator ','`).
+  - Les lignes avec le nombre de champs attendu (`--expected-fields`) sont recopiées telles quelles.
+  - **Fusion Intelligente (si inférence active)**: Pour les lignes ayant plus de champs que prévu, le programme tente de fusionner les champs adjacents. Une fusion est considérée valide si le champ résultant correspond au type inféré pour la colonne cible. Il essaie de trouver une combinaison de fusions qui produit le nombre correct de champs, chacun respectant son type.
+  - **Fusion Basique (si inférence inactive ou échoue)**: Si l'inférence de type n'est pas active ou si la fusion intelligente ne trouve pas de solution valide, les champs en excès sont fusionnés de manière basique dans le dernier champ attendu (comportement précédent), ou la ligne est marquée comme `#BAD_MERGE_FAILED` ou `#BAD_EXCESS_NO_INFERENCE`.
+  - Les lignes avec trop peu de champs sont marquées comme irrécupérables (ex: `#BAD_FEW (N champs)`).
+  - Produit un CSV où les lignes problématiques sont soit corrigées intelligemment, soit clairement marquées.
+- **Options (en plus de celles de `repair_csv`)**:
+  - `--inference-lines <N>` : Nombre de lignes "correctes" à analyser pour inférer les types de colonnes (par défaut: 1000). Mettre à 0 pour désactiver l'inférence et la fusion intelligente.
+  - `--decimal-separator <char>` : Caractère utilisé comme séparateur décimal lors de l'inférence de type pour les champs numériques (par défaut: '.').
 - **À utiliser** : pour obtenir un CSV “corrigé” automatiquement, prêt à être exploité, même si certaines lignes sont imparfaites.
 - **Exemple** :
   ```sh
-  cargo run --bin repair_csv_auto -- --file ../Evenements_anon.csv --delimiter ',' --output ../Evenements_anon_corrected_auto.csv --expected-fields 93 --max 100000
+  cargo run --bin repair_csv_auto -- \
+    --file ../Evenements_anon.csv \
+    --delimiter ',' \
+    --output ../Evenements_anon_corrected_auto.csv \
+    --expected-fields 93 \
+    --max 100000 \
+    --inference-lines 5000 \
+    --decimal-separator ','
   ```
 
 ## 6. `hyper_csv_analyze`
