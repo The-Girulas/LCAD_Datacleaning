@@ -45,42 +45,20 @@ Chaque outil est un binaire indépendant, à lancer avec `cargo run --bin <nom> 
   cargo run --bin count_lines -- --file Evenements_anon.csv --max 10000 --delimiter ','
   ```
 
-### 3. `count_fields` (DÉPRÉCIÉ)
-- **Déprécié** : Cet outil n’est plus recommandé, car il ne gère pas les fichiers CSV hétérogènes et s’arrête sur la première erreur de structure.
-- **Utilisez à la place** : `count_fields_raw` ou `hyper_csv_analyze` pour une analyse robuste.
-- **Ancien usage** :
-  ```sh
-  cargo run --bin count_fields -- --file ../Evenements_anon.csv --delimiter ',' --max 1000
-  ```
-
-### 3bis. `count_fields_raw`
-- **But** : Analyser la distribution du nombre de champs par ligne (analyse brute, sans parser strict) donne les meilleurs résultats
+### 3. `count_fields` 
+- **But** : Analyser la distribution du nombre de champs par ligne
 - **Options** :
   - `--file <chemin>`
   - `--encoding <encodage>`
   - `--delimiter <séparateur>`
   - `--max <N>`
-  - `--decimal <séparateur>` (pour gérer le séparateur décimal ambigu)
 - **Exemple** :
   ```sh
-  cargo run --bin count_fields_raw -- --file Evenements_anon.csv --delimiter ',' --max 1000 --decimal ','
+  cargo run --bin count_fields -- --file Evenements_anon.csv --delimiter ',' --max 1000
   ```
 
-### 4. `analyze_field`
-- **But** : Compter les valeurs distinctes d’un champ donné (par nom ou index)(crash sur fichier non-corrigé)
-- **Options** :
-  - `--file <chemin>`
-  - `--encoding <encodage>`
-  - `--delimiter <séparateur>`
-  - `--field-name <nom>` ou `--field-index <idx>`
-  - `--max <N>`
-- **Exemple** :
-  ```sh
-  cargo run --bin analyze_field -- --file Evenements_anon.csv --field-name TYPE_EVENEMENT --max 1000 --delimiter ','
-  ```
-
-### 4bis. `analyze_field_raw`
-- **But** : Compter les valeurs distinctes d’un champ donné (analyse brute)
+### 4. `analyze_field_raw`
+- **But** : Compter les valeurs distinctes d’un champ donné
 - **Options** :
   - `--file <chemin>`
   - `--encoding <encodage>`
@@ -118,30 +96,10 @@ Chaque outil est un binaire indépendant, à lancer avec `cargo run --bin <nom> 
 - **Options (en plus de celles de `repair_csv`)**:
   - `--inference-lines <N>` : Nombre de lignes "correctes" à analyser pour inférer les types de colonnes (par défaut: 1000). Mettre à 0 pour désactiver l'inférence et la fusion intelligente.
   - `--decimal-separator <char>` : Caractère utilisé comme séparateur décimal lors de l'inférence de type pour les champs numériques (par défaut: '.').
-- **À utiliser** : pour obtenir un CSV “corrigé” automatiquement, prêt à être exploité, même si certaines lignes sont imparfaites.
+- **À utiliser** : pour obtenir un CSV “corrigé” automatiquement, prêt à être exploité, même si certaines lignes peuvent être imparfaites.
 - **Exemple** :
   ```sh
-  cargo run --bin repair_csv_auto -- \
-    --file ../Evenements_anon.csv \
-    --delimiter ',' \
-    --output ../Evenements_anon_corrected_auto.csv \
-    --expected-fields 93 \
-    --max 100000 \
-    --inference-lines 5000 \
-    --decimal-separator ','
-  ```
-
-### 5ter. `repair_csv_smart`
-- **But** : Réparation intelligente des lignes incorrectes en fusionnant les champs seulement si le format ne correspond pas à celui des lignes correctes.
-- **Fonctionnement** :
-  - Sépare les lignes correctes (bon nombre de champs) des incorrectes.
-  - Utilise la première ligne correcte comme modèle de format.
-  - Pour chaque ligne incorrecte, tente de reconstruire la ligne champ par champ : si la valeur est plausible (non vide ou conforme au modèle), elle est gardée, sinon on fusionne avec la cellule précédente jusqu’à retrouver le bon format.
-  - Si la ligne ne peut pas être réparée, elle est marquée comme irrécupérable.
-- **À utiliser** : pour une réparation plus fine et robuste que la simple fusion “en bloc”, tout en restant simple et efficace.
-- **Exemple** :
-  ```sh
-  cargo run --bin repair_csv_smart -- --file Evenements_anon.csv --delimiter ',' --output Evenements_anon_corrected_smart.csv --expected-fields 93 --max 100000
+  cargo run --bin repair_csv_auto -- --file Evenements_anon.csv --delimiter ',' --output Evenements_anon_corrected_auto.csv --expected-fields 93 --max 100000 --inference-lines 5000 --decimal-separator ','
   ```
 
 ## 6. `hyper_csv_analyze`
@@ -168,22 +126,14 @@ cargo run --bin analyze_field -- --file Evenements_anon.csv --field-name "TYPE_E
 cargo run --bin hyper_csv_analyze -- --file Evenements_anon.csv --delimiter ',' --expected-fields 93 --analyze-fields 2,5 --output Evenements_anon_hyper_corrected.csv --max 100000
 ```
 
-## Conseils pour éviter les crashs
+## Conseils pour éviter les temsp longs
 
 - Utiliser l’option `--max` pour limiter le nombre de lignes traitées lors des premiers tests
 
-## Axes d’amélioration (TODO)
-
-- [ ] Ajouter une option `--top N` pour n’afficher que les N valeurs les plus fréquentes (pour les distributions et les valeurs de champ)
-- [ ] Ajouter une option `--output fichier.txt` pour écrire la distribution dans un fichier
-- [ ] Ajouter une option `--min-count N` pour n’afficher que les valeurs apparaissant au moins N fois
-- [ ] Ajouter des tests unitaires sur des cas limites
-
-<<<<<<< HEAD
 
 
-=======
->>>>>>> bc14e1857931117139f1214983390e02620f4ff2
+
+
 ## Licence
 
-Projet pédagogique – Université 2024
+Projet pédagogique – Université ISFA 2024-2025

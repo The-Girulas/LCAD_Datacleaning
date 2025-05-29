@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Write}; // Write is not strictly needed for stdout flushing
 use std::path::PathBuf;
+use std::time::Duration; // For steady tick
 
 use clap::Parser;
 use encoding_rs::*;
+use indicatif::{ProgressBar, ProgressStyle}; // Added indicatif imports
 
 /// Analyse tolérante des valeurs d'un champ dans un CSV corrompu.
 #[derive(Parser, Debug)]
@@ -34,8 +36,27 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let file = File::open(&args.file)?;
-    let reader = BufReader::new(file);
+    let pb = if let Some(max_val) = args.max {
+        ProgressBar::new(max_val as u64)
+    } else {
+        ProgressBar::new_spinner()
+    };
+
+    let style = ProgressStyle::default_spinner()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ")
+        .template("{spinner:.green} [{elapsed_precise}] {pos} records processed ({per_sec})")
+        .unwrap_or_else(|_| ProgressStyle::default_spinner());
+    pb.set_style(style);
+
+    if args.max.is_none() {
+        pb.enable_steady_tick(Duration::from_millis(100));
+    }
+
+    let file = File::open(&args.file).map_err(|e| {
+        pb.finish_with_message(format!("Error: Could not open file {:?}: {}", args.file, e));
+        e
+    })?;
+    let buf_file_reader = BufReader::new(file); // Renamed to avoid confusion
 
     let encoding = match args.encoding.to_lowercase().as_str() {
         "utf-8" => UTF_8,
@@ -47,57 +68,86 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
-    let transcoded = encoding_rs_io::DecodeReaderBytesBuilder::new()
+    let transcoded_reader = encoding_rs_io::DecodeReaderBytesBuilder::new()
         .encoding(Some(encoding))
-        .build(reader);
+        .build(buf_file_reader);
 
-    let reader = BufReader::new(transcoded);
+    let line_reader = BufReader::new(transcoded_reader); // Renamed for clarity
 
-    let delimiter = if args.delimiter == "\\t" {
+    let delimiter_char = if args.delimiter == "\\t" {
         '\t'
     } else {
-        args.delimiter.chars().next().unwrap()
+        // Ensure delimiter is not empty and take the first char.
+        // This was already in the original code, but good to be mindful of with pb.
+        args.delimiter.chars().next().ok_or_else(|| {
+            pb.finish_with_message("Error: Delimiter cannot be empty.");
+            anyhow::anyhow!("Delimiter cannot be empty. Use '\\t' for tab.")
+        })?
     };
 
-    let mut count = 0usize;
+    let mut record_count = 0usize; // Renamed 'count' to 'record_count' for clarity with instructions
     let mut distribution: HashMap<String, usize> = HashMap::new();
+    let mut limit_reached = false;
 
-    for line_result in reader.lines() {
-        let line = line_result?;
+    for line_result in line_reader.lines() {
+        let line = match line_result {
+            Ok(ln) => ln,
+            Err(e) => {
+                pb.abandon_with_message(format!("Error reading line after {} records: {}", record_count, e));
+                return Err(e.into());
+            }
+        };
+
+        // Manual CSV parsing logic from the original code
         let mut in_quotes = false;
         let mut fields = Vec::new();
-        let mut current = String::new();
+        let mut current_field_buffer = String::new(); // Renamed 'current'
 
         for c in line.chars() {
             if c == '"' {
                 in_quotes = !in_quotes;
-                current.push(c);
-            } else if c == delimiter && !in_quotes {
-                fields.push(current.trim_matches('"').to_string());
-                current.clear();
+                current_field_buffer.push(c); // Keep quotes for now, trim later
+            } else if c == delimiter_char && !in_quotes {
+                fields.push(current_field_buffer.trim_matches('"').to_string());
+                current_field_buffer.clear();
             } else {
-                current.push(c);
+                current_field_buffer.push(c);
             }
         }
-        fields.push(current.trim_matches('"').to_string());
+        fields.push(current_field_buffer.trim_matches('"').to_string());
 
         let value = fields.get(args.field_index).unwrap_or(&"".to_string()).clone();
         *distribution.entry(value).or_insert(0) += 1;
 
-        count += 1;
-        if count % 100_000 == 0 {
-            print!("\rLignes lues : {count}");
-            std::io::stdout().flush().unwrap();
-        }
+        record_count += 1;
+        pb.inc(1);
+
+        // Removed old progress print
+        // if record_count % 100_000 == 0 {
+        //     print!("\rLignes lues : {record_count}");
+        //     std::io::stdout().flush().unwrap();
+        // }
 
         if let Some(max_lines) = args.max {
-            if count >= max_lines {
-                println!("Limite de {max_lines} lignes atteinte.");
+            if record_count >= max_lines {
+                // Removed old: println!("Limite de {max_lines} lignes atteinte.");
+                limit_reached = true;
                 break;
             }
         }
     }
 
+    if limit_reached {
+        if let Some(max_val) = args.max {
+             pb.finish_with_message(format!("Analyzed {} records (limit of {} reached).", record_count, max_val));
+        } else { // Should not happen if limit_reached is true
+             pb.finish_with_message(format!("Analyzed {} records (limit reached).", record_count));
+        }
+    } else {
+        pb.finish_with_message(format!("Analyzed {} records.", record_count));
+    }
+
+    // The distribution printing remains as it's the core output
     println!("Valeurs distinctes pour le champ index {} :", args.field_index);
     let mut entries: Vec<_> = distribution.into_iter().collect();
     entries.sort_by(|a, b| b.1.cmp(&a.1)); // tri décroissant

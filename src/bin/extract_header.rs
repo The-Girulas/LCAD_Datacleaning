@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use encoding_rs::*;
 use csv::ReaderBuilder;
+use indicatif::{ProgressBar, ProgressStyle}; // Added indicatif imports
 
 /// Extraction de l'entête d'un fichier CSV, en gérant encodage et séparateur personnalisés.
 #[derive(Parser, Debug)]
@@ -26,8 +27,17 @@ struct Args {
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
+    let pb = ProgressBar::new(1); // Initialize ProgressBar, assuming 1 line for header
+    pb.set_style(ProgressStyle::default_spinner()
+        .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ") // Spinner characters
+        .template("{spinner:.green} [{elapsed_precise}] {pos} lines processed ({per_sec})")
+        .unwrap_or_else(|_| ProgressStyle::default_spinner())); // Fallback style
+
     // Ouvre le fichier brut
-    let file = File::open(&args.file)?;
+    let file = File::open(&args.file).map_err(|e| {
+        pb.finish_with_message(format!("Error: Could not open file {:?}: {}", args.file, e));
+        e
+    })?;
     let mut reader = BufReader::new(file);
 
     // Détecte l'encodage
@@ -50,6 +60,11 @@ fn main() -> anyhow::Result<()> {
     let delimiter_byte = if args.delimiter == "\\t" {
         b'\t'
     } else {
+        // Ensure delimiter is not empty and take the first byte.
+        if args.delimiter.is_empty() {
+            pb.finish_with_message("Error: Delimiter cannot be empty.");
+            return Err(anyhow::anyhow!("Delimiter cannot be empty. Use '\\t' for tab."));
+        }
         args.delimiter.as_bytes()[0]
     };
 
@@ -62,7 +77,12 @@ fn main() -> anyhow::Result<()> {
     let header_record = csv_reader
         .records()
         .next()
-        .ok_or_else(|| anyhow::anyhow!("Fichier vide ou erreur de lecture"))??;
+        .ok_or_else(|| {
+            pb.finish_with_message("Error: File empty or initial read error.");
+            anyhow::anyhow!("Fichier vide ou erreur de lecture")
+        })??;
+    
+    pb.inc(1); // Increment progress after successfully reading the header record
 
     let nb_vars = header_record.len();
     println!("Nombre de variables détectées dans l'entête : {nb_vars}");
@@ -82,7 +102,10 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Sauvegarde dans ListeVariablesContrats.txt
-    let mut out = File::create("ListeVariablesContrats.txt")?;
+    let mut out = File::create("ListeVariablesContrats.txt").map_err(|e| {
+        pb.finish_with_message(format!("Error: Could not create output file: {}", e));
+        e
+    })?;
     writeln!(out, "{:^6} | {:<30} || {:^6} | {:<30}", "Idx", "Ordre d'origine", "Idx α", "Ordre alphabétique")?;
     writeln!(out, "{:-<6}-+-{:-<30}-++-{:-<6}-+-{:-<30}", "", "", "", "")?;
     for i in 0..original.len().max(alpha.len()) {
@@ -90,7 +113,8 @@ fn main() -> anyhow::Result<()> {
         let (idx_a, var_a) = alpha.get(i).copied().unwrap_or((0, ""));
         writeln!(out, "{:^6} | {:<30} || {:^6} | {:<30}", idx_o, var_o, idx_a, var_a)?;
     }
-
+    
+    pb.finish_with_message("Header extracted."); // Finish progress bar
     println!("Entête extraite et sauvegardée dans ListeVariablesContrats.txt (double colonne)");
 
     Ok(())
