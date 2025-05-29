@@ -143,7 +143,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    println!("Distribution brute du nombre de champs par ligne :");
+    println!("\nDistribution brute du nombre de champs par ligne :");
     let mut keys: Vec<_> = distribution.keys().cloned().collect();
     keys.sort();
     for k in keys {

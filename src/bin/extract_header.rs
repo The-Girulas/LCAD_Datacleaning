@@ -67,13 +67,31 @@ fn main() -> anyhow::Result<()> {
     let nb_vars = header_record.len();
     println!("Nombre de variables détectées dans l'entête : {nb_vars}");
 
-    // Sauvegarde dans ListeVariablesContrats.txt
-    let mut out = File::create("ListeVariablesContrats.txt")?;
-    for (i, var) in header_record.iter().enumerate() {
-        writeln!(out, "{i}: {var}")?;
+    // Prépare les deux colonnes
+    let mut original: Vec<(usize, &str)> = header_record.iter().enumerate().collect();
+    let mut alpha: Vec<(usize, &str)> = header_record.iter().enumerate().collect();
+    alpha.sort_by_key(|&(_, v)| v.to_ascii_lowercase());
+
+    // Affichage joli en console
+    println!("\n{:^6} | {:<30} || {:^6} | {:<30}", "Idx", "Ordre d'origine", "Idx α", "Ordre alphabétique");
+    println!("{:-<6}-+-{:-<30}-++-{:-<6}-+-{:-<30}", "", "", "", "");
+    for i in 0..original.len().max(alpha.len()) {
+        let (idx_o, var_o) = original.get(i).copied().unwrap_or((0, ""));
+        let (idx_a, var_a) = alpha.get(i).copied().unwrap_or((0, ""));
+        println!("{:^6} | {:<30} || {:^6} | {:<30}", idx_o, var_o, idx_a, var_a);
     }
 
-    println!("Entête extraite et sauvegardée dans ListeVariablesContrats.txt");
+    // Sauvegarde dans ListeVariablesContrats.txt
+    let mut out = File::create("ListeVariablesContrats.txt")?;
+    writeln!(out, "{:^6} | {:<30} || {:^6} | {:<30}", "Idx", "Ordre d'origine", "Idx α", "Ordre alphabétique")?;
+    writeln!(out, "{:-<6}-+-{:-<30}-++-{:-<6}-+-{:-<30}", "", "", "", "")?;
+    for i in 0..original.len().max(alpha.len()) {
+        let (idx_o, var_o) = original.get(i).copied().unwrap_or((0, ""));
+        let (idx_a, var_a) = alpha.get(i).copied().unwrap_or((0, ""));
+        writeln!(out, "{:^6} | {:<30} || {:^6} | {:<30}", idx_o, var_o, idx_a, var_a)?;
+    }
+
+    println!("Entête extraite et sauvegardée dans ListeVariablesContrats.txt (double colonne)");
 
     Ok(())
 }
